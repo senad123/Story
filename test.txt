@@ -1,107 +1,64 @@
-import express from "express";
-import bodyParser from "body-parser";
-import pg from "pg";
+Certainly! You can make your code more concise and adhere to best practices. Here's a refactored version of your code with comments explaining each part:
 
-const app = express();
-const port = 3000;
-
-const db = new pg.Client({
-  user: "postgres",
-  host: "localhost",
-  database: "world",
-  password: "sen123",
-  port: 5432,
-});
-db.connect();
-
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static("public"));
-
-let currentUserId = 1;
-
-let users = [
-  { id: 1, name: "Angela", color: "teal" },
-  { id: 2, name: "Jack", color: "powderblue" },
-];
-
-async function checkVisisted() {
-  const result = await db.query(
-    "SELECT country_code FROM visited_countries JOIN users ON users.id = user_id WHERE user_id = $1; ",
-    [currentUserId]
-  );
-  let countries = [];
-  result.rows.forEach((country) => {
-    countries.push(country.country_code);
-  });
-  return countries;
-}
-
-async function getCurrentUser() {
-  const result = await db.query("SELECT * FROM users");
-  users = result.rows;
-  return users.find((user) => user.id == currentUserId);
-}
-
-app.get("/", async (req, res) => {
-  const countries = await checkVisisted();
-  const currentUser = await getCurrentUser();
-  res.render("index.ejs", {
-    countries: countries,
-    total: countries.length,
-    users: users,
-    color: currentUser.color,
-  });
-});
-app.post("/add", async (req, res) => {
-  const input = req.body["country"];
-  const currentUser = await getCurrentUser();
-
+```javascript
+// Function to perform database operations
+async function addVisitedCountry(input, currentUserId) {
   try {
-    const result = await db.query(
+    // Query to get the country code
+    const countryQueryResult = await db.query(
       "SELECT country_code FROM countries WHERE LOWER(country_name) LIKE '%' || $1 || '%';",
       [input.toLowerCase()]
     );
 
-    const data = result.rows[0];
-    const countryCode = data.country_code;
-    try {
-      await db.query(
-        "INSERT INTO visited_countries (country_code, user_id) VALUES ($1, $2)",
-        [countryCode, currentUserId]
-      );
-      res.redirect("/");
-    } catch (err) {
-      console.log(err);
+    // Check if a country code was found
+    if (countryQueryResult.rows.length === 0) {
+      throw new Error('Country not found');
     }
-  } catch (err) {
-    console.log(err);
-  }
-});
 
-app.post("/user", async (req, res) => {
-  if (req.body.add === "new") {
-    res.render("new.ejs");
-  } else {
-    currentUserId = req.body.user;
+    // Extracting the country code
+    const countryCode = countryQueryResult.rows[0].country_code;
+
+    // Inserting into visited_countries table
+    await db.query(
+      "INSERT INTO visited_countries (country_code, user_id) VALUES ($1, $2)",
+      [countryCode, currentUserId]
+    );
+
+    // Redirect on successful insertion
     res.redirect("/");
+  } catch (err) {
+    // Logging errors
+    console.error(err);
+
+    // Handling different types of errors
+    if (err.message === 'Country not found') {
+      // Specific handling for 'Country not found' error
+      res.status(404).send('Country not found');
+    } else {
+      // General error response
+      res.status(500).send('An error occurred');
+    }
   }
-});
+}
 
-app.post("/new", async (req, res) => {
-  const name = req.body.name;
-  const color = req.body.color;
+// Example of calling the function
+// addVisitedCountry(input, currentUserId);
+```
 
-  const result = await db.query(
-    "INSERT INTO users (name, color) VALUES($1, $2) RETURNING *;",
-    [name, color]
-  );
+### Best Practices Illustrated:
 
-  const id = result.rows[0].id;
-  currentUserId = id;
+1. **Single Responsibility**: The function `addVisitedCountry` encapsulates the logic for adding a visited country. This adheres to the single responsibility principle.
 
-  res.redirect("/");
-});
+2. **Error Checking**: Before proceeding to the insert operation, it checks if the country was found. This prevents inserting invalid data.
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+3. **Centralized Error Handling**: The `try-catch` block is used at a higher level to handle errors from both queries. This reduces nested `try-catch` blocks and makes the code cleaner.
+
+4. **Specific Error Responses**: By checking the error message, the function can send more meaningful responses, like a 404 status when a country is not found.
+
+5. **Use of Async-Await**: The use of `async-await` makes the code easier to read and reason about, especially with asynchronous database operations.
+
+6. **Logging Errors**: Errors are logged to the console for debugging purposes.
+
+7. **Handling Different Errors Differently**: Different errors are handled according to their types, allowing for more granular control over error responses.
+
+This approach simplifies the code, makes it more maintainable, and improves error handling.
